@@ -10,14 +10,14 @@
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
 <style>
-:root{--glass:rgba(255,255,255,.06);--stroke:rgba(255,255,255,.18);--text:#e8eef7;--muted:#9fb3c8;--accent:#4da3ff;--radius:16px;--blur:18px}
-*{box-sizing:border-box}html,body{height:100%}body{margin:0;color:var(--text);font:15px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#05070b}
+:root{--glass:rgba(255,255,255,.06);--stroke:rgba(255,255,255,.18);--text:#e8eef7;--muted:#9fb3c8;--accent:#4da3ff;--radius:16px}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;color:var(--text);font:15px/1.55 -apple-system,"SF Pro Text","Segoe UI",Roboto,Arial,sans-serif;background:#05070b}
 .wrap{padding:24px 32px}
 .brand{display:flex;align-items:center;gap:12px}
 .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 18px var(--accent)}
-h1{margin:0;font-size:28px;font-weight:800;letter-spacing:.25px;background:linear-gradient(90deg,#eef5ff,#8ec5ff);-webkit-background-clip:text;background-clip:text;color:transparent}
+h1{margin:0;font-size:28px;font-weight:800;background:linear-gradient(90deg,#eef5ff,#8ec5ff);-webkit-background-clip:text;background-clip:text;color:transparent}
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
-.card{background:linear-gradient(180deg,var(--glass),rgba(255,255,255,.03));border:1px solid var(--stroke);border-radius:var(--radius);padding:16px;backdrop-filter:blur(var(--blur)) saturate(160%);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 8px 30px rgba(0,0,0,.35)}
+.card{background:linear-gradient(180deg,var(--glass),rgba(255,255,255,.03));border:1px solid var(--stroke);border-radius:16px;padding:16px}
 .kpi{grid-column:1 / -1;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
 .kpi-label{color:var(--muted);font-size:13px}.kpi-value{font-size:28px;font-weight:700;margin-top:6px}
 .chart{grid-column:1 / span 12}
@@ -63,76 +63,78 @@ h1{margin:0;font-size:28px;font-weight:800;letter-spacing:.25px;background:linea
 <script>
 dayjs.extend(dayjs_plugin_customParseFormat);
 
-// ====== CONFIG ======
-const SHEET_ID = '1QiFjfGky5vNBPf9WCPNkvszjJXH9413GecYzioSO32Q';
-const GID = '1435752205';
-const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${GID}`;
-const CURRENCY='USD';
-const money = n => new Intl.NumberFormat('en-US',{style:'currency',currency:CURRENCY,maximumFractionDigits:2}).format(n||0);
+// ---- CONFIG ----
+const SHEET_ID='1QiFjfGky5vNBPf9WCPNkvszjJXH9413GecYzioSO32Q';
+const GID='1435752205';
 
-// ====== FETCH + DEBUG ======
-async function fetchGViz(){
-  const res = await fetch(GVIZ_URL, {mode:'cors', cache:'no-store'});
-  const text = await res.text();
-  if(!res.ok){
-    showDebug(`HTTP ${res.status}\n\n${text.slice(0,600)}`);
-    throw new Error('GViz HTTP '+res.status);
+// 3 источника CSV, используем первый успешно сработавший
+const SOURCES=[
+  // 1) gviz -> csv
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${GID}`,
+  // 2) прямой экспорт
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`,
+  // 3) publish-to-web (если включено)
+  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/pub?gid=${GID}&single=true&output=csv`
+];
+
+const CURRENCY='USD';
+const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:CURRENCY,maximumFractionDigits:2}).format(n||0);
+
+// ---- Robust fetch with debug ----
+async function fetchCSV(){
+  let lastErr=null, lastBody='';
+  for(const url of SOURCES){
+    try{
+      const r=await fetch(url,{cache:'no-store',mode:'cors'});
+      const t=await r.text();
+      if(r.ok && /^[^\r\n]*Date,Type,Unit,Category,Repair,Details,Vendor,Total,/.test(t.trim())){
+        return t;
+      }
+      lastErr=`HTTP ${r.status} on ${url}`;
+      lastBody=t.slice(0,600);
+    }catch(e){ lastErr=String(e); }
   }
-  if(!/google\.visualization\.Query\.setResponse\(/.test(text)){
-    showDebug(`Unexpected body (first 600 chars):\n\n${text.slice(0,600)}`);
-    throw new Error('No GViz wrapper');
-  }
-  return text;
+  showDebug(`${lastErr}\n\n${lastBody}`);
+  throw new Error('CSV not available');
 }
 
 function showDebug(msg){
-  const box = document.getElementById('debug');
-  box.style.display='block';
-  box.textContent = `Debug: ${msg}`;
+  const box=document.getElementById('debug'); box.style.display='block'; box.textContent=`Debug:\n${msg}`;
 }
 
-// ====== PARSE ======
-function parseGViz(text){
-  const json = JSON.parse(text.replace(/^.*setResponse\(/,'').replace(/\);?$/,''));
-  const cols = json.table.cols.map(c => (c.label||c.id||'').trim());
-  const rows = json.table.rows.map(r=>{
-    const o={};
-    (r.c||[]).forEach((c,i)=>{
-      let v = c ? c.v : '';
-      if (typeof v==='string' && /^Date\(\d+,\d+,\d+\)$/.test(v)){
-        const m=v.match(/^Date\((\d+),(\d+),(\d+)\)$/);
-        if(m) v = new Date(+m[1], +m[2], +m[3]); // month 0-based
-      }
-      o[cols[i]||`col${i}`] = v;
-    });
-    return o;
-  });
-  return rows;
+// ---- CSV parser (quotes-safe) ----
+function parseCsv(csv){
+  const rows=[]; let row=[], cell='', q=false;
+  const push=()=>{row.push(cell);cell='';}, nl=()=>{rows.push(row);row=[];};
+  for(let i=0;i<csv.length;i++){
+    const ch=csv[i];
+    if(ch==='"'){ q=!q; continue; }
+    if(ch===',' && !q){ push(); continue; }
+    if((ch==='\n' || ch==='\r') && !q){ if(cell!==''||row.length){ push(); nl(); } continue; }
+    cell+=ch;
+  }
+  if(cell!==''||row.length){ push(); nl(); }
+  return rows.filter(r=>r.length);
 }
 
-// ====== NORMALIZE ======
-function normalize(records){
-  const parseAmount=v=>{
-    if(v==null) return 0;
-    const s=String(v).replace(/[^0-9.,-]+/g,'').replace(/(\d),(?=\d{3}\b)/g,'$1').replace(',','.');
-    const n=parseFloat(s); return isNaN(n)?0:n;
-  };
-  return records.map(r=>{
-    const rawDate = r['Date']||r['DATE']||r['date']||'';
-    const d = (rawDate instanceof Date) ? dayjs(rawDate)
-      : dayjs(rawDate, ['YYYY-MM-DD','MM/DD/YYYY','M/D/YYYY','DD.MM.YYYY','D.M.YYYY'], true);
-    const valid = d.isValid();
-    return {
-      date: valid ? d.toDate() : null,
-      ym:   valid ? d.format('YYYY-MM') : null,
-      type:r['Type']||'', unit:r['Unit']||'', category:r['Category']||'',
-      repair:r['Repair']||'', details:r['Details']||'',
-      vendor:r['Vendor']||'', total:parseAmount(r['Total']),
-      paid_by:r['Paid By']||'', paid:(r['Paid?']||'').toLowerCase(),
-      reported_by:r['Reported By']||'', status:(r['Status']||'').toString().trim(),
-      notes:r['Notes']||''
-    };
-  });
+// ---- Normalize to A–M only ----
+function normalize(table){
+  const hdr=table[0].map(h=>h.trim());
+  const need=['Date','Type','Unit','Category','Repair','Details','Vendor','Total','Paid By','Paid?','Reported By','Status','Notes'];
+  // карта индексов
+  const idx={}; need.forEach(n=>idx[n]=hdr.indexOf(n));
+  const get=(r,n)=>{const i=idx[n]; return i>=0 && r[i]!=null ? String(r[i]).trim() : '';};
+  const parseAmount=v=>{ if(v==null) return 0; const s=String(v).replace(/[^0-9.,-]+/g,'').replace(/(\d),(?=\d{3}\b)/g,'$1').replace(',','.'); const n=parseFloat(s); return isNaN(n)?0:n; };
+  const parseDate=v=>{ if(!v) return null; const d=dayjs(v,['YYYY-MM-DD','M/D/YYYY','MM/DD/YYYY','D.M.YYYY','DD.MM.YYYY'],true); return d.isValid()? d.toDate(): null; };
+  return table.slice(1).map(r=>({
+    date: parseDate(get(r,'Date')),
+    ym: (d=>d? dayjs(d).format('YYYY-MM'): null)(parseDate(get(r,'Date'))),
+    type:get(r,'Type'), unit:get(r,'Unit'), category:get(r,'Category'),
+    repair:get(r,'Repair'), details:get(r,'Details'), vendor:get(r,'Vendor'),
+    total: parseAmount(get(r,'Total')),
+    paid_by:get(r,'Paid By'), paid:get(r,'Paid?').toLowerCase(),
+    reported_by:get(r,'Reported By'), status:get(r,'Status'), notes:get(r,'Notes')
+  }));
 }
 
 function keepValid(rows){
@@ -142,7 +144,6 @@ function keepValid(rows){
   );
 }
 
-// ====== AGGREGATE & RENDER ======
 function aggregate(rows){
   const byMonth=new Map(); rows.forEach(r=>{ if(r.ym) byMonth.set(r.ym,(byMonth.get(r.ym)||0)+r.total); });
   const months=[...byMonth.keys()].sort(); const monthSeries=months.map(m=>byMonth.get(m));
@@ -156,9 +157,9 @@ function aggregate(rows){
 function renderKPI(A){
   animateNum(document.getElementById('kpi-total'),A.totalSpend,money);
   animateNum(document.getElementById('kpi-open'),A.openCount,v=>v.toFixed(0));
-  document.getElementById('kpi-vendors').textContent = A.vendorCount;
+  document.getElementById('kpi-vendors').textContent=A.vendorCount;
 }
-function animateNum(el,val,fmt){const t0=performance.now(),dur=900;function f(t){const k=Math.min((t-t0)/dur,1);el.textContent=fmt(val*(1-Math.pow(1-k,3))); if(k<1)requestAnimationFrame(f);}requestAnimationFrame(f);}
+function animateNum(el,val,fmt){const t0=performance.now(),dur=800;function f(t){const k=Math.min((t-t0)/dur,1);el.textContent=fmt(val*(1-Math.pow(1-k,3))); if(k<1)requestAnimationFrame(f);}requestAnimationFrame(f);}
 
 function renderLine(A){
   const ctx=document.getElementById('lineChart').getContext('2d'); if(window._line) window._line.destroy();
@@ -182,25 +183,28 @@ function renderTable(rows){
   });
   t.appendChild(tb);
   el.innerHTML=''; el.appendChild(t);
-  document.getElementById('count').textContent = `(${rows.length})`;
+  document.getElementById('count').textContent=`(${rows.length})`;
 }
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
-// ====== INIT ======
-(async function(){
+(async function init(){
   try{
-    const txt = await fetchGViz();
-    const raw = parseGViz(txt);
-    const rows = keepValid(normalize(raw)).sort((a,b)=>(a.date?+a.date:0)-(b.date?+b.date:0));
-    const A = aggregate(rows);
+    const csv=await fetchCSV();
+    const table=parseCsv(csv);
+    const rows=keepValid(normalize(table)).sort((a,b)=>(a.date?+a.date:0)-(b.date?+b.date:0));
+    const A=aggregate(rows);
     renderKPI(A); renderLine(A);
 
-    let filtered = rows;
+    let filtered=rows;
     const q=document.getElementById('q'); const go=document.getElementById('go');
-    const apply=()=>{ const needle=q.value.trim().toLowerCase(); filtered = !needle? rows : rows.filter(r=>{
-      const dateHit=r.date?dayjs(r.date).format('YYYY-MM-DD').includes(needle):false;
-      return ['unit','vendor','category','type','notes','status','details','repair','paid_by'].some(k=>String(r[k]||'').toLowerCase().includes(needle))||dateHit||String(r.total).includes(needle);
-    }); renderTable(filtered); };
+    const apply=()=>{ const needle=q.value.trim().toLowerCase();
+      filtered=!needle?rows:rows.filter(r=>{
+        const dateHit=r.date?dayjs(r.date).format('YYYY-MM-DD').includes(needle):false;
+        return ['unit','vendor','category','type','notes','status','details','repair','paid_by']
+          .some(k=>String(r[k]||'').toLowerCase().includes(needle)) || dateHit || String(r.total).includes(needle);
+      });
+      renderTable(filtered);
+    };
     go.addEventListener('click',apply); q.addEventListener('keydown',e=>{ if(e.key==='Enter') apply(); });
     renderTable(filtered);
   }catch(e){
