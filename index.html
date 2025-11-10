@@ -11,6 +11,7 @@
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/timezone.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
   <style>
   :root{
     --bg-1:#0b0f14; --bg-2:#0e1420; --glass:rgba(255,255,255,.06);
@@ -114,7 +115,7 @@
   const GID = '1435752205';
   const CURRENCY = 'USD';
 
-  dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone);
+  dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone); dayjs.extend(dayjs_plugin_customParseFormat);
   const endpoints = {
     gviz: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?gid=${GID}&tqx=out:json`,
     exportCsv: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`,
@@ -156,10 +157,11 @@
   function normalize(records){
     return records.map(r=>{ const parseAmount=v=>{ if(v==null) return 0; const s=String(v).replace(/[^0-9.,-]+/g,'').replace(',','.'); const n=parseFloat(s); return isNaN(n)?0:n;};
       const date = r['Date']||r['DATE']||r['date']||''; return {
-        date: date? new Date(date):null, ym: date? dayjs(date).format('YYYY-MM'):'0000-00',
+        const _d = dayjs(date, ['YYYY-MM-DD','MM/DD/YYYY','M/D/YYYY','DD.MM.YYYY','D.M.YYYY'], true);
+        date: _d.isValid()? _d.toDate():null, ym: _d.isValid()? _d.format('YYYY-MM'):null,
         type:r['Type']||'', unit:r['Unit']||'', category:r['Category']||'', repair:r['Repair']||'', details:r['Details']||'', vendor:r['Vendor']||'', total:parseAmount(r['Total']), paid_by:r['Paid By']||'', paid:(r['Paid?']||'').toString().toLowerCase(), reported_by:r['Reported By']||'', status:(r['Status']||'').toString(), notes:r['Notes']||''
       };
-    }).filter(x=>x.date instanceof Date && !isNaN(x.date));
+    })/* keep all rows, even if date is missing */;
   }
   function aggregate(rows){
     const byMonth=new Map(); rows.forEach(r=>byMonth.set(r.ym,(byMonth.get(r.ym)||0)+r.total));
@@ -176,7 +178,7 @@
     animateNumber(document.getElementById('kpi-open'), aggr.openCount, v=>v.toFixed(0));
     animateNumber(document.getElementById('kpi-avg'), aggr.avgCost, fmtMoney);
     document.getElementById('kpi-vendors').textContent = aggr.vendorCount;
-    const period = rows.length? `${dayjs(rows[0].date).year()}–${dayjs(rows.at(-1).date).year()}`:'—';
+    const _drows = rows.filter(r=>r.date); const period = _drows.length? `${dayjs(_drows[0].date).year()}–${dayjs(_drows.at(-1).date).year()}`:'—';
     document.getElementById('kpi-total-period').textContent = period;
   }
   function animateNumber(el,value,format){ const dur=900; const start=performance.now(); function tick(now){ const t=Math.min(Math.max((now-start)/dur,0),1); const eased=1-Math.pow(1-t,3); el.textContent = format(value*eased); if(t<1) requestAnimationFrame(tick);} requestAnimationFrame(tick); }
@@ -195,7 +197,7 @@
     const barCtx=document.getElementById('barChart').getContext('2d'); if(window._bar) window._bar.destroy();
     window._bar=new Chart(barCtx,{type:'bar', data:{labels:aggr.topVendors.map(x=>x[0]), datasets:[{label:'Spend', data:aggr.topVendors.map(x=>x[1]), borderRadius:8, backgroundColor:'#4da3ff'}]}, options:{indexAxis:'y', animation:{duration:800}, plugins:{legend:{display:false}}, scales:{x:{grid:{color:'rgba(255,255,255,.06)'},ticks:{color:'#9fb3c8'},beginAtZero:true}, y:{grid:{display:false},ticks:{color:'#9fb3c8'}}}});
   }
-  function renderTable(rows){ const container=document.getElementById('tbl'); const t=document.createElement('table'); const thead=document.createElement('thead'); thead.innerHTML=`<tr><th>Date</th><th>Unit</th><th>Vendor</th><th>Category</th><th>Type</th><th>Total</th><th>Status</th><th>Notes</th></tr>`; t.appendChild(thead); const tb=document.createElement('tbody'); rows.slice().reverse().forEach(r=>{ const tr=document.createElement('tr'); const date=dayjs(r.date).format('YYYY-MM-DD'); const statusClass=(r.status||'').toLowerCase()==='closed'?'closed':'open'; tr.innerHTML=`<td>${date}</td><td>${escapeHtml(r.unit)}</td><td>${escapeHtml(r.vendor)}</td><td>${escapeHtml(r.category)}</td><td>${escapeHtml(r.type)}</td><td>${fmtMoney(r.total)}</td><td><span class='badge ${statusClass}'>${escapeHtml(r.status||'—')}</span></td><td>${escapeHtml(r.notes||'')}</td>`; tb.appendChild(tr); }); t.appendChild(tb); container.innerHTML=''; container.appendChild(t); const countEl=document.getElementById('count'); if(countEl) countEl.textContent = `(${rows.length})`; }
+  function renderTable(rows){ const container=document.getElementById('tbl'); const t=document.createElement('table'); const thead=document.createElement('thead'); thead.innerHTML=`<tr><th>Date</th><th>Unit</th><th>Vendor</th><th>Category</th><th>Type</th><th>Total</th><th>Status</th><th>Notes</th></tr>`; t.appendChild(thead); const tb=document.createElement('tbody'); rows.slice().reverse().forEach(r=>{ const tr=document.createElement('tr'); const date = r.date? dayjs(r.date).format('YYYY-MM-DD') : '—'; const statusClass=(r.status||'').toLowerCase()==='closed'?'closed':'open'; tr.innerHTML=`<td>${date}</td><td>${escapeHtml(r.unit)}</td><td>${escapeHtml(r.vendor)}</td><td>${escapeHtml(r.category)}</td><td>${escapeHtml(r.type)}</td><td>${fmtMoney(r.total)}</td><td><span class='badge ${statusClass}'>${escapeHtml(r.status||'—')}</span></td><td>${escapeHtml(r.notes||'')}</td>`; tb.appendChild(tr); }); t.appendChild(tb); container.innerHTML=''; container.appendChild(t); const countEl=document.getElementById('count'); if(countEl) countEl.textContent = `(${rows.length})`; }
   function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
   (async function init(){ const raw = await fetchSheet(); const rows = normalize(raw).sort((a,b)=>a.date-b.date); const aggr = aggregate(rows); renderKPI(aggr, rows); renderCharts(aggr);
   // search
