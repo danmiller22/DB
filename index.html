@@ -6,7 +6,6 @@
   <title>US Team Fleet</title>
   <meta name="color-scheme" content="dark only">
   <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
-  <!-- Chart.js + dayjs -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/dayjs.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/utc.js"></script>
@@ -14,8 +13,7 @@
   <script src="https://cdn.jsdelivr.net/npm/dayjs@1/plugin/customParseFormat.js"></script>
   <style>
   :root{--bg-1:#0b0f14;--bg-2:#0e1420;--glass:rgba(255,255,255,.06);--glass-strong:rgba(255,255,255,.12);--stroke:rgba(255,255,255,.18);--text:#e8eef7;--muted:#9fb3c8;--accent:#4da3ff;--radius:16px;--blur:18px}
-  *{box-sizing:border-box}
-  html,body{height:100%}
+  *{box-sizing:border-box} html,body{height:100%}
   body{margin:0;color:var(--text);font:15px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#05070b;overflow-y:overlay}
   .bg::before{content:"";position:fixed;inset:-220vmax;pointer-events:none;z-index:0;background:
     radial-gradient(60vmax 60vmax at -10% 110%, rgba(80,150,255,.90) 0%, rgba(80,150,255,.65) 26%, rgba(80,150,255,.35) 48%, rgba(80,150,255,.15) 60%, transparent 72%),
@@ -50,8 +48,8 @@
   .tools input{min-width:340px;padding:12px 16px;border-radius:18px;position:relative;isolation:isolate;border:1px solid rgba(255,255,255,.28);background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,.08));color:var(--text);outline:none;backdrop-filter:blur(24px) saturate(170%);box-shadow:inset 0 1px 0 rgba(255,255,255,.35),inset 0 -8px 18px rgba(0,0,0,.35),0 10px 28px rgba(0,0,0,.45)}
   .tools input::placeholder{color:#c6d7ea}
   .tools button{position:relative;isolation:isolate;padding:12px 18px;border-radius:18px;border:1px solid rgba(255,255,255,.34);background:linear-gradient(180deg,rgba(255,255,255,.32),rgba(255,255,255,.10));color:var(--text);cursor:pointer;backdrop-filter:blur(26px) saturate(180%);box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -12px 26px rgba(0,0,0,.35),0 14px 36px rgba(0,0,0,.55);transition:transform .12s ease,box-shadow .25s ease,border-color .25s ease}
-  .tools button::before{content:"";position:absolute;inset:2px;border-radius:inherit;background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.0));opacity:.42;pointer-events:none}
-  .tools button::after{content:"";position:absolute;inset:-4px;border-radius:inherit;box-shadow:0 0 42px rgba(77,163,255,.55);opacity:0;transition:opacity .25s}
+  .tools button::before{content:\"\";position:absolute;inset:2px;border-radius:inherit;background:linear-gradient(180deg,rgba(255,255,255,.55),rgba(255,255,255,.0));opacity:.42;pointer-events:none}
+  .tools button::after{content:\"\";position:absolute;inset:-4px;border-radius:inherit;box-shadow:0 0 42px rgba(77,163,255,.55);opacity:0;transition:opacity .25s}
   .tools button:hover{box-shadow:inset 0 1px 0 rgba(255,255,255,.65),inset 0 -12px 30px rgba(0,0,0,.42),0 20px 52px rgba(0,0,0,.65)}
   .tools button:hover::after{opacity:.95}.tools button:active{transform:translateY(1px)}
   .tools button:focus-visible{outline:none;border-color:#8bc0ff;box-shadow:0 0 0 3px #8bc0ff44}
@@ -60,9 +58,7 @@
 </head>
 <body>
   <div class="bg"></div>
-  <header class="wrap">
-    <div class="brand"><span class="dot"></span><h1>US Team Fleet</h1></div>
-  </header>
+  <header class="wrap"><div class="brand"><span class="dot"></span><h1>US Team Fleet</h1></div></header>
   <main class="wrap grid">
     <section class="kpi">
       <div class="card kpi-card"><div class="kpi-label">Total Spend</div><div class="kpi-value" id="kpi-total">$0</div><div class="kpi-sub" id="kpi-total-period">—</div></div>
@@ -78,7 +74,6 @@
   <footer class="wrap foot"><small>“It's our duty to lead people to the light”<br/>by Dan Miller</small></footer>
 
 <script>
-  // Sheet config
   const SHEET_ID = '1QiFjfGky5vNBPf9WCPNkvszjJXH9413GecYzioSO32Q';
   const GID = '1435752205';
   const CURRENCY = 'USD';
@@ -113,17 +108,18 @@
     return parseCsv(t3);
   }
 
-  // Parse GViz JSON, including Date(YYYY,MM,DD)
+  // --- Parsers ---
   function parseGviz(text){
     const json = JSON.parse(text.replace(/^.*setResponse\(/,'').replace(/\);?$/,''));
-    const cols = json.table.cols.map(c => (c.label||c.id||'').trim());
-    return json.table.rows.map(r => {
+    const cols = json.table.cols.map(c => (c.label || c.id || '').trim());
+    return json.table.rows.map(r=>{
       const o = {};
-      (r.c||[]).forEach((c,i) => {
+      (r.c || []).forEach((c,i)=>{
         let v = c ? c.v : '';
-        if (typeof v === 'string' && /^Date\(\d+,\d+,\d+\)$/.test(v)) {
+        // handle GViz date literal e.g. Date(2025,10,6)
+        if(typeof v === 'string' && /^Date\(\d+,\d+,\d+\)$/.test(v)){
           const m = v.match(/^Date\((\d+),(\d+),(\d+)\)$/);
-          if (m) v = new Date(+m[1], +m[2], +m[3]); // month is 0-based
+          if(m) v = new Date(+m[1], +m[2], +m[3]); // month is 0-based
         }
         o[cols[i] || `col${i}`] = v;
       });
@@ -131,7 +127,6 @@
     });
   }
 
-  // Parse CSV (fallbacks)
   function parseCsv(csv){
     const lines = csv.split(/\r?\n/).filter(Boolean);
     const headers = lines[0].split(',').map(h=>h.trim());
@@ -149,7 +144,7 @@
     });
   }
 
-  // Normalize rows
+  // --- Normalize to internal model ---
   function normalize(records){
     const parseAmount = v => {
       if(v==null) return 0;
@@ -158,13 +153,13 @@
     };
     return records.map(r=>{
       const rawDate = r['Date']||r['DATE']||r['date']||'';
-      let d; 
-      if (rawDate instanceof Date && !isNaN(rawDate)) d = dayjs(rawDate);
-      else d = dayjs(rawDate, ['YYYY-MM-DD','MM/DD/YYYY','M/D/YYYY','DD.MM.YYYY','D.M.YYYY'], true);
-      const valid = d.isValid();
+      let dObj;
+      if(rawDate instanceof Date && !isNaN(rawDate)) dObj = dayjs(rawDate);
+      else dObj = dayjs(rawDate, ['YYYY-MM-DD','MM/DD/YYYY','M/D/YYYY','DD.MM.YYYY','D.M.YYYY'], true);
+      const valid = dObj.isValid();
       return {
-        date: valid? d.toDate(): null,
-        ym:   valid? d.format('YYYY-MM'): null,
+        date: valid ? dObj.toDate() : null,
+        ym:   valid ? dObj.format('YYYY-MM') : null,
         type:r['Type']||'', unit:r['Unit']||'', category:r['Category']||'',
         repair:r['Repair']||'', details:r['Details']||'',
         vendor:r['Vendor']||'', total:parseAmount(r['Total']),
@@ -245,16 +240,15 @@
     const countEl=document.getElementById('count'); if(countEl) countEl.textContent=`(${rows.length})`;
   }
 
-  function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;'); }
+  function escapeHtml(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/\"/g,'&quot;').replace(/'/g,'&#39;'); }
 
   (async function init(){
     const raw = await fetchSheet();
-    const rows = normalize(raw).sort((a,b)=>(a.date?+a.date:0)-(b.date?+b.date:0));
+    const rows = normalize(raw).sort((a,b)=>(a.date?+a.date:0)-(b.date?+b.date:0));  // safe sort
     const aggr = aggregate(rows);
     renderKPI(aggr, rows);
     renderCharts(aggr);
 
-    // search
     let filtered = rows;
     const q=document.getElementById('q'); const go=document.getElementById('go');
     const apply=()=>{ filtered=searchRows(rows,q.value); renderTable(filtered); };
