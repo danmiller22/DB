@@ -12,25 +12,15 @@
 <style>
 :root{--glass:rgba(255,255,255,.06);--stroke:rgba(255,255,255,.18);--text:#e8eef7;--muted:#9fb3c8;--accent:#4da3ff;--radius:16px;--blur:18px}
 *{box-sizing:border-box}html,body{height:100%}body{margin:0;color:var(--text);font:15px/1.55 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:#05070b}
-.bg::before{content:"";position:fixed;inset:-220vmax;pointer-events:none;z-index:0;background:
-radial-gradient(60vmax 60vmax at -10% 110%, rgba(80,150,255,.90) 0%, rgba(80,150,255,.15) 60%, transparent 72%),
-radial-gradient(55vmax 55vmax at 110% -10%, rgba(170,210,255,.85) 0%, rgba(170,210,255,.28) 55%, transparent 72%),
-radial-gradient(52vmax 52vmax at 115% 115%, rgba(100,170,255,.80) 0%, rgba(100,170,255,.18) 58%, transparent 72%),
-radial-gradient(20vmax 20vmax at 6% 18%, rgba(120,190,255,.90) 0%, rgba(120,190,255,.30) 55%, transparent 72%),
-radial-gradient(45vmax 35vmax at 55% 38%, rgba(255,255,255,.12) 0%, rgba(255,255,255,.06) 35%, transparent 70%);
-filter:blur(50px) saturate(185%);animation:drift 60s ease-in-out infinite alternate}
-@keyframes drift{0%{transform:translate3d(-2%,-1%,0) scale(1.02)}100%{transform:translate3d(2%,1.2%,0) scale(1.06)}}
-.wrap{width:100%;padding:24px 32px}
+.wrap{padding:24px 32px}
 .brand{display:flex;align-items:center;gap:12px}
 .brand .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 18px var(--accent)}
 h1{margin:0;font-size:28px;font-weight:800;letter-spacing:.25px;background:linear-gradient(90deg,#eef5ff,#8ec5ff);-webkit-background-clip:text;background-clip:text;color:transparent}
 .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:16px}
 .card{background:linear-gradient(180deg,var(--glass),rgba(255,255,255,.03));border:1px solid var(--stroke);border-radius:var(--radius);padding:16px;backdrop-filter:blur(var(--blur)) saturate(160%);box-shadow:inset 0 1px 0 rgba(255,255,255,.08),0 8px 30px rgba(0,0,0,.35)}
 .kpi{grid-column:1 / -1;display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
-.kpi-card{padding:18px}.kpi-label{color:var(--muted);font-size:13px}.kpi-value{font-size:28px;font-weight:700;margin-top:6px}.kpi-sub{color:var(--muted);font-size:12px;margin-top:4px}
-.chart{grid-column:auto / span 6}.chart.full{grid-column:1 / span 12}
-.card-head{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px}
-h2{margin:0;font-size:16px}.hint{color:var(--muted);font-size:12px}
+.kpi-label{color:var(--muted);font-size:13px}.kpi-value{font-size:28px;font-weight:700;margin-top:6px}
+.chart{grid-column:1 / span 12}
 .table{grid-column:1 / span 12}.tbl{width:100%;overflow:auto;border-radius:12px}
 .tbl table{width:100%;border-collapse:separate;border-spacing:0}
 .tbl th,.tbl td{padding:10px 12px;white-space:nowrap;border-bottom:1px solid rgba(255,255,255,.06)}
@@ -40,97 +30,107 @@ h2{margin:0;font-size:16px}.hint{color:var(--muted);font-size:12px}
 .tools{display:flex;gap:8px;align-items:center}
 .tools input{min-width:340px;padding:12px 16px;border-radius:18px;border:1px solid rgba(255,255,255,.28);background:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,.08));color:#e8eef7}
 .tools button{padding:12px 18px;border-radius:18px;border:1px solid rgba(255,255,255,.34);background:linear-gradient(180deg,rgba(255,255,255,.32),rgba(255,255,255,.10));color:#e8eef7}
+#debug{display:none;white-space:pre-wrap;background:#2b1111;border:1px solid #ff9b9b;color:#ffdede;border-radius:12px;padding:12px;margin:12px 0}
 </style>
 </head>
 <body>
-<div class="bg"></div>
 <header class="wrap"><div class="brand"><span class="dot"></span><h1>US Team Fleet</h1></div></header>
 
 <main class="wrap grid">
   <section class="kpi">
-    <div class="card kpi-card"><div class="kpi-label">Total Spend</div><div class="kpi-value" id="kpi-total">$0</div><div class="kpi-sub" id="kpi-total-period">—</div></div>
-    <div class="card kpi-card"><div class="kpi-label">Open Tickets</div><div class="kpi-value" id="kpi-open">0</div></div>
-    <div class="card kpi-card"><div class="kpi-label">Vendors</div><div class="kpi-value" id="kpi-vendors">0</div></div>
+    <div class="card"><div class="kpi-label">Total Spend</div><div class="kpi-value" id="kpi-total">$0</div></div>
+    <div class="card"><div class="kpi-label">Open Tickets</div><div class="kpi-value" id="kpi-open">0</div></div>
+    <div class="card"><div class="kpi-label">Vendors</div><div class="kpi-value" id="kpi-vendors">0</div></div>
   </section>
 
-  <section class="card chart full"><div class="card-head"><h2>Spend over time</h2><div class="hint">by month</div></div><canvas id="lineChart" height="220"></canvas></section>
-  <section class="card chart"><div class="card-head"><h2>By Category</h2><div class="hint">distribution</div></div><canvas id="donutChart" height="200"></canvas></section>
-  <section class="card chart"><div class="card-head"><h2>Top Vendors</h2><div class="hint">top-5 by spend</div></div><canvas id="barChart" height="200"></canvas></section>
+  <section class="card chart">
+    <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px">
+      <h2 style="margin:0;font-size:16px">Spend over time</h2><div style="color:#9fb3c8;font-size:12px">by month</div>
+    </div>
+    <canvas id="lineChart" height="220"></canvas>
+  </section>
 
   <section class="card table">
-    <div class="card-head">
-      <h2>All records <span id="count" class="hint"></span></h2>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <h2 style="margin:0;font-size:16px">All records <span id="count" style="color:#9fb3c8;font-size:12px"></span></h2>
       <div class="tools"><input id="q" type="search" placeholder="Search: unit, vendor, category, type, notes"/><button id="go" type="button">Search</button></div>
     </div>
+    <div id="debug"></div>
     <div class="tbl" id="tbl"></div>
   </section>
 </main>
 
-<footer class="wrap" style="color:#9fb3c8;text-align:center;padding-bottom:32px"><small>“It's our duty to lead people to the light”<br/>by Dan Miller</small></footer>
-
 <script>
-const SHEET_ID='1QiFjfGky5vNBPf9WCPNkvszjJXH9413GecYzioSO32Q';
-const GID='1435752205';
-const CSV_URL=`https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`;
-const CURRENCY='USD';
-
 dayjs.extend(dayjs_plugin_customParseFormat);
-const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:CURRENCY,maximumFractionDigits:2}).format(n||0);
 
-// ---- CSV fetch (без GViz) ----
-async function fetchCsvText(){
-  const r=await fetch(CSV_URL,{cache:'no-store'});
-  if(!r.ok) throw new Error('CSV fetch failed: '+r.status);
-  const t=await r.text();
-  if(!/^Date,Type,Unit,Category,Repair,Details,Vendor,Total,/.test(t.trim()))
-    console.warn('CSV header differs, parsed anyway:', t.slice(0,120));
-  return t;
-}
+// ====== CONFIG ======
+const SHEET_ID = '1QiFjfGky5vNBPf9WCPNkvszjJXH9413GecYzioSO32Q';
+const GID = '1435752205';
+const GVIZ_URL = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:json&gid=${GID}`;
+const CURRENCY='USD';
+const money = n => new Intl.NumberFormat('en-US',{style:'currency',currency:CURRENCY,maximumFractionDigits:2}).format(n||0);
 
-// надёжный CSV-парсер с кавычками и запятыми
-function parseCsv(csv){
-  const rows=[]; let row=[], cell='', q=false;
-  function push(){ row.push(cell); cell=''; }
-  function newRow(){ rows.push(row); row=[]; }
-  for(let i=0;i<csv.length;i++){
-    const ch=csv[i];
-    if(ch===`"`){ q=!q; continue; }
-    if(ch===',' && !q){ push(); continue; }
-    if((ch==='\n'||ch==='\r') && !q){ if(cell!==''||row.length){ push(); newRow(); } continue; }
-    cell+=ch;
+// ====== FETCH + DEBUG ======
+async function fetchGViz(){
+  const res = await fetch(GVIZ_URL, {mode:'cors', cache:'no-store'});
+  const text = await res.text();
+  if(!res.ok){
+    showDebug(`HTTP ${res.status}\n\n${text.slice(0,600)}`);
+    throw new Error('GViz HTTP '+res.status);
   }
-  if(cell!==''||row.length){ push(); newRow(); }
-  return rows.filter(r=>r.length);
+  if(!/google\.visualization\.Query\.setResponse\(/.test(text)){
+    showDebug(`Unexpected body (first 600 chars):\n\n${text.slice(0,600)}`);
+    throw new Error('No GViz wrapper');
+  }
+  return text;
 }
 
-function normalize(table){
-  const hdr=table[0].map(h=>h.trim());
-  const idx=n=>hdr.indexOf(n);
-  const I={
-    Date:idx('Date'),Type:idx('Type'),Unit:idx('Unit'),Category:idx('Category'),
-    Repair:idx('Repair'),Details:idx('Details'),Vendor:idx('Vendor'),Total:idx('Total'),
-    PaidBy:idx('Paid By'),Paid:idx('Paid?'),ReportedBy:idx('Reported By'),Status:idx('Status'),Notes:idx('Notes')
-  };
+function showDebug(msg){
+  const box = document.getElementById('debug');
+  box.style.display='block';
+  box.textContent = `Debug: ${msg}`;
+}
+
+// ====== PARSE ======
+function parseGViz(text){
+  const json = JSON.parse(text.replace(/^.*setResponse\(/,'').replace(/\);?$/,''));
+  const cols = json.table.cols.map(c => (c.label||c.id||'').trim());
+  const rows = json.table.rows.map(r=>{
+    const o={};
+    (r.c||[]).forEach((c,i)=>{
+      let v = c ? c.v : '';
+      if (typeof v==='string' && /^Date\(\d+,\d+,\d+\)$/.test(v)){
+        const m=v.match(/^Date\((\d+),(\d+),(\d+)\)$/);
+        if(m) v = new Date(+m[1], +m[2], +m[3]); // month 0-based
+      }
+      o[cols[i]||`col${i}`] = v;
+    });
+    return o;
+  });
+  return rows;
+}
+
+// ====== NORMALIZE ======
+function normalize(records){
   const parseAmount=v=>{
     if(v==null) return 0;
     const s=String(v).replace(/[^0-9.,-]+/g,'').replace(/(\d),(?=\d{3}\b)/g,'$1').replace(',','.');
     const n=parseFloat(s); return isNaN(n)?0:n;
   };
-  const parseDate=v=>{
-    if(!v) return null;
-    const d=dayjs(v,['YYYY-MM-DD','M/D/YYYY','MM/DD/YYYY','D.M.YYYY','DD.MM.YYYY'],true);
-    return d.isValid()? d.toDate(): null;
-  };
-  return table.slice(1).map(r=>{
-    const val=i=> (i>=0 && r[i]!=null)? String(r[i]).trim(): '';
+  return records.map(r=>{
+    const rawDate = r['Date']||r['DATE']||r['date']||'';
+    const d = (rawDate instanceof Date) ? dayjs(rawDate)
+      : dayjs(rawDate, ['YYYY-MM-DD','MM/DD/YYYY','M/D/YYYY','DD.MM.YYYY','D.M.YYYY'], true);
+    const valid = d.isValid();
     return {
-      date: parseDate(val(I.Date)),
-      ym: (d=> d? dayjs(d).format('YYYY-MM'): null)(parseDate(val(I.Date))),
-      type:val(I.Type), unit:val(I.Unit), category:val(I.Category),
-      repair:val(I.Repair), details:val(I.Details), vendor:val(I.Vendor),
-      total: parseAmount(val(I.Total)),
-      paid_by:val(I.PaidBy), paid:val(I.Paid).toLowerCase(),
-      reported_by:val(I.ReportedBy), status:val(I.Status), notes:val(I.Notes)
+      date: valid ? d.toDate() : null,
+      ym:   valid ? d.format('YYYY-MM') : null,
+      type:r['Type']||'', unit:r['Unit']||'', category:r['Category']||'',
+      repair:r['Repair']||'', details:r['Details']||'',
+      vendor:r['Vendor']||'', total:parseAmount(r['Total']),
+      paid_by:r['Paid By']||'', paid:(r['Paid?']||'').toLowerCase(),
+      reported_by:r['Reported By']||'', status:(r['Status']||'').toString().trim(),
+      notes:r['Notes']||''
     };
   });
 }
@@ -142,54 +142,70 @@ function keepValid(rows){
   );
 }
 
+// ====== AGGREGATE & RENDER ======
 function aggregate(rows){
   const byMonth=new Map(); rows.forEach(r=>{ if(r.ym) byMonth.set(r.ym,(byMonth.get(r.ym)||0)+r.total); });
   const months=[...byMonth.keys()].sort(); const monthSeries=months.map(m=>byMonth.get(m));
-  const byCat=new Map(); rows.forEach(r=>byCat.set(r.category||'Other',(byCat.get(r.category||'Other')||0)+r.total));
-  const topCat=[...byCat.entries()].sort((a,b)=>b[1]-a[1]);
   const byVendor=new Map(); rows.forEach(r=>{ const k=(r.vendor||'').trim(); if(!k) return; byVendor.set(k,(byVendor.get(k)||0)+r.total); });
-  const topVendors=[...byVendor.entries()].sort((a,b)=>b[1]-a[1]).slice(0,5);
   const totalSpend=rows.reduce((s,r)=>s+(Number.isFinite(r.total)?r.total:0),0);
   const openCount=rows.filter(r=> (r.status||'').toLowerCase()!=='closed' && r.status!=='').length;
   const vendorCount=byVendor.size;
-  return {months,monthSeries,topCat,topVendors,totalSpend,openCount,vendorCount};
+  return {months,monthSeries,totalSpend,openCount,vendorCount};
 }
 
-function animateNumber(el,value,format){const dur=900;const start=performance.now();function tick(now){const t=Math.min(Math.max((now-start)/dur,0),1);const eased=1-Math.pow(1-t,3);el.textContent=format(value*eased);if(t<1)requestAnimationFrame(tick);}requestAnimationFrame(tick);}
-function buildGradient(ctx,area){const g=ctx.createLinearGradient(0,area.bottom,0,area.top);g.addColorStop(0,'rgba(77,163,255,0.00)');g.addColorStop(.6,'rgba(77,163,255,0.18)');g.addColorStop(1,'rgba(77,163,255,0.28)');return g;}
-function renderKPI(A,rows){animateNumber(document.getElementById('kpi-total'),A.totalSpend,money);animateNumber(document.getElementById('kpi-open'),A.openCount,v=>v.toFixed(0));document.getElementById('kpi-vendors').textContent=A.vendorCount;const withDate=rows.filter(r=>r.date);document.getElementById('kpi-total-period').textContent=withDate.length?`${dayjs(withDate[0].date).year()}–${dayjs(withDate.at(-1).date).year()}`:'—';}
-function renderCharts(A){
-  const l=document.getElementById('lineChart').getContext('2d'); if(window._l) window._l.destroy();
-  window._l=new Chart(l,{type:'line',data:{labels:A.months,datasets:[{label:'Spend',data:A.monthSeries,borderColor:'#4da3ff',borderWidth:2.5,pointRadius:0,tension:.35,fill:true,backgroundColor:c=>buildGradient(c.chart.ctx,c.chart.chartArea)}]},options:{plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#9fb3c8'}},y:{grid:{color:'rgba(255,255,255,.06)'},ticks:{color:'#9fb3c8'},beginAtZero:true}}});
-  const d=document.getElementById('donutChart').getContext('2d'); if(window._d) window._d.destroy();
-  window._d=new Chart(d,{type:'doughnut',data:{labels:A.topCat.map(x=>x[0]),datasets:[{data:A.topCat.map(x=>x[1]),cutout:'70%',borderWidth:1,borderColor:'rgba(255,255,255,.15)',backgroundColor:['#4da3ff','#6cffc0','#ffb86b','#b17cff','#ff6b9e','#8be9fd']}]},options:{plugins:{legend:{display:false}}});
-  const b=document.getElementById('barChart').getContext('2d'); if(window._b) window._b.destroy();
-  window._b=new Chart(b,{type:'bar',data:{labels:A.topVendors.map(x=>x[0]),datasets:[{label:'Spend',data:A.topVendors.map(x=>x[1]),borderRadius:8,backgroundColor:'#4da3ff'}]},options:{indexAxis:'y',plugins:{legend:{display:false}},scales:{x:{grid:{color:'rgba(255,255,255,.06)'},ticks:{color:'#9fb3c8'},beginAtZero:true},y:{grid:{display:false},ticks:{color:'#9fb3c8'}}}});
+function renderKPI(A){
+  animateNum(document.getElementById('kpi-total'),A.totalSpend,money);
+  animateNum(document.getElementById('kpi-open'),A.openCount,v=>v.toFixed(0));
+  document.getElementById('kpi-vendors').textContent = A.vendorCount;
 }
+function animateNum(el,val,fmt){const t0=performance.now(),dur=900;function f(t){const k=Math.min((t-t0)/dur,1);el.textContent=fmt(val*(1-Math.pow(1-k,3))); if(k<1)requestAnimationFrame(f);}requestAnimationFrame(f);}
+
+function renderLine(A){
+  const ctx=document.getElementById('lineChart').getContext('2d'); if(window._line) window._line.destroy();
+  window._line=new Chart(ctx,{type:'line',data:{labels:A.months,datasets:[{label:'Spend',data:A.monthSeries,borderColor:'#4da3ff',borderWidth:2.5,pointRadius:0,tension:.35,fill:true,
+    backgroundColor:c=>{const g=c.chart.ctx.createLinearGradient(0,c.chart.chartArea.bottom,0,c.chart.chartArea.top);g.addColorStop(0,'rgba(77,163,255,0)');g.addColorStop(.6,'rgba(77,163,255,.18)');g.addColorStop(1,'rgba(77,163,255,.28)');return g;}}]},
+    options:{plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#9fb3c8'}},y:{grid:{color:'rgba(255,255,255,.06)'},ticks:{color:'#9fb3c8'},beginAtZero:true}}});
+}
+
 function renderTable(rows){
-  const el=document.getElementById('tbl'); const t=document.createElement('table'); const th=document.createElement('thead');
-  th.innerHTML=`<tr><th>Date</th><th>Unit</th><th>Vendor</th><th>Category</th><th>Type</th><th>Total</th><th>Status</th><th>Notes</th></tr>`; t.appendChild(th);
+  const el=document.getElementById('tbl');
+  const t=document.createElement('table'); const th=document.createElement('thead');
+  th.innerHTML=`<tr><th>Date</th><th>Unit</th><th>Vendor</th><th>Category</th><th>Type</th><th>Total</th><th>Status</th><th>Notes</th></tr>`;
+  t.appendChild(th);
   const tb=document.createElement('tbody');
-  rows.slice().reverse().forEach(r=>{const tr=document.createElement('tr');const date=r.date?dayjs(r.date).format('YYYY-MM-DD'):'—';const statusClass=(r.status||'').toLowerCase()==='closed'?'closed':'open';tr.innerHTML=`<td>${date}</td><td>${esc(r.unit)}</td><td>${esc(r.vendor)}</td><td>${esc(r.category)}</td><td>${esc(r.type)}</td><td>${money(r.total)}</td><td><span class="badge ${statusClass}">${esc(r.status||'—')}</span></td><td>${esc(r.notes||'')}</td>`;tb.appendChild(tr);});
-  t.appendChild(tb); el.innerHTML=''; el.appendChild(t); document.getElementById('count').textContent=`(${rows.length})`;
+  rows.slice().reverse().forEach(r=>{
+    const tr=document.createElement('tr');
+    const date=r.date?dayjs(r.date).format('YYYY-MM-DD'):'—';
+    const statusClass=(r.status||'').toLowerCase()==='closed'?'closed':'open';
+    tr.innerHTML=`<td>${date}</td><td>${esc(r.unit)}</td><td>${esc(r.vendor)}</td><td>${esc(r.category)}</td><td>${esc(r.type)}</td><td>${money(r.total)}</td><td><span class="badge ${statusClass}">${esc(r.status||'—')}</span></td><td>${esc(r.notes||'')}</td>`;
+    tb.appendChild(tr);
+  });
+  t.appendChild(tb);
+  el.innerHTML=''; el.appendChild(t);
+  document.getElementById('count').textContent = `(${rows.length})`;
 }
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 
-(async function init(){
+// ====== INIT ======
+(async function(){
   try{
-    const csv=await fetchCsvText();
-    const table=parseCsv(csv);
-    const rows=keepValid(normalize(table)).sort((a,b)=>(a.date?+a.date:0)-(b.date?+b.date:0));
-    const A=aggregate(rows);
-    renderKPI(A,rows); renderCharts(A);
-    let filtered=rows;
+    const txt = await fetchGViz();
+    const raw = parseGViz(txt);
+    const rows = keepValid(normalize(raw)).sort((a,b)=>(a.date?+a.date:0)-(b.date?+b.date:0));
+    const A = aggregate(rows);
+    renderKPI(A); renderLine(A);
+
+    let filtered = rows;
     const q=document.getElementById('q'); const go=document.getElementById('go');
-    const apply=()=>{ filtered=rows.filter(r=>{const s=(k)=>String(r[k]||'').toLowerCase(); const needle=q.value.trim().toLowerCase(); if(!needle) return true; const dateHit=r.date?dayjs(r.date).format('YYYY-MM-DD').includes(needle):false; return ['unit','vendor','category','type','notes','status','details','repair','paid_by'].some(k=>s(k).includes(needle))||dateHit||String(r.total).includes(needle);}); renderTable(filtered);};
-    go.addEventListener('click',apply); q.addEventListener('keydown',e=>{if(e.key==='Enter')apply();});
+    const apply=()=>{ const needle=q.value.trim().toLowerCase(); filtered = !needle? rows : rows.filter(r=>{
+      const dateHit=r.date?dayjs(r.date).format('YYYY-MM-DD').includes(needle):false;
+      return ['unit','vendor','category','type','notes','status','details','repair','paid_by'].some(k=>String(r[k]||'').toLowerCase().includes(needle))||dateHit||String(r.total).includes(needle);
+    }); renderTable(filtered); };
+    go.addEventListener('click',apply); q.addEventListener('keydown',e=>{ if(e.key==='Enter') apply(); });
     renderTable(filtered);
-    addEventListener('resize',()=>window._l?.update('none'),{passive:true});
   }catch(e){
-    document.getElementById('tbl').innerHTML = `<div style="padding:12px;color:#ffbdbd">Data load error: ${esc(e.message)}</div>`;
+    showDebug(String(e));
+    document.getElementById('tbl').innerHTML = `<div style="padding:12px;color:#ffbdbd">Data load error. See Debug box above.</div>`;
     console.error(e);
   }
 })();
