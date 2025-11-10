@@ -117,18 +117,32 @@
   dayjs.extend(dayjs_plugin_utc); dayjs.extend(dayjs_plugin_timezone);
   const endpoints = {
     gviz: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?gid=${GID}&tqx=out:json`,
-    csv:  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/pub?gid=${GID}&single=true&output=csv`
+    exportCsv: `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`,
+    pubCsv:  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/pub?gid=${GID}&single=true&output=csv`
   };
   const fmtMoney = (n) => new Intl.NumberFormat('en-US', {style:'currency', currency:CURRENCY, maximumFractionDigits:2}).format(n||0);
   const clamp = (n,a,b)=>Math.min(Math.max(n,a),b);
   let charts={};
 
   async function fetchSheet(){
+    // 1) Try GViz JSON (works with "Anyone with the link – Viewer")
     try{
-      const r = await fetch(endpoints.gviz,{cache:'no-store'}); const text = await r.text();
-      if(!text.includes('google.visualization')) throw new Error('not public gviz');
-      return parseGviz(text);
-    }catch(e){ const r = await fetch(endpoints.csv,{cache:'no-store'}); return parseCsv(await r.text()); }
+      const r1 = await fetch(endpoints.gviz,{cache:'no-store'});
+      const t1 = await r1.text();
+      if(t1.includes('google.visualization')) return parseGviz(t1);
+      throw new Error('GViz not available');
+    }catch(e1){ /* continue */ }
+    // 2) Try direct CSV export (works if file is public)
+    try{
+      const r2 = await fetch(endpoints.exportCsv,{cache:'no-store'});
+      if(r2.ok){ const t2 = await r2.text(); if(t2 && t2.length>0) return parseCsv(t2); }
+      throw new Error('export CSV not available');
+    }catch(e2){ /* continue */ }
+    // 3) Try "Publish to the web" CSV
+    const r3 = await fetch(endpoints.pubCsv,{cache:'no-store'});
+    const t3 = await r3.text();
+    if(!r3.ok || !t3) throw new Error('Sheet is not publicly readable. Enable "Anyone with the link" or Publish to web.');
+    return parseCsv(t3);
   }
   function parseGviz(text){
     const json = JSON.parse(text.replace(/^.*setResponse\(/,'').replace(/\);?$/,''));
@@ -136,8 +150,7 @@
     return json.table.rows.map(r=>{ const o={}; r.c.forEach((c,i)=> o[cols[i]||`col${i}`] = c?c.v:''); return o;});
   }
   function parseCsv(csv){
-    const lines = csv.split(/?
-/).filter(Boolean); const headers = lines[0].split(',').map(h=>h.trim());
+    const lines = csv.split(/\r?\n/).filter(Boolean); const headers = lines[0].split(',').map(h=>h.trim());
     return lines.slice(1).map(line=>{ const cells=[]; let cur='', q=false; for(let i=0;i<line.length;i++){const ch=line[i]; if(ch==='"'){q=!q;continue;} if(ch===','&&!q){cells.push(cur);cur='';continue;} cur+=ch;} cells.push(cur); const o={}; headers.forEach((h,i)=>o[h]= (cells[i]??'').trim()); return o; });
   }
   function normalize(records){
