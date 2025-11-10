@@ -63,153 +63,138 @@ h1{margin:0;font-size:28px;font-weight:800;background:linear-gradient(90deg,#eef
 <script>
 dayjs.extend(dayjs_plugin_customParseFormat);
 
-// ---- CONFIG ----
+// === CONFIG ===
 const SHEET_ID='1QiFjfGky5vNBPf9WCPNkvszjJXH9413GecYzioSO32Q';
 const GID='1435752205';
 
-// 3 источника CSV, используем первый успешно сработавший
-const SOURCES=[
-  // 1) gviz -> csv
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?tqx=out:csv&gid=${GID}`,
-  // 2) прямой экспорт
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/export?format=csv&gid=${GID}`,
-  // 3) publish-to-web (если включено)
-  `https://docs.google.com/spreadsheets/d/${SHEET_ID}/pub?gid=${GID}&single=true&output=csv`
-];
+// Тянем только A–M. JSONP, без fetch, чтобы обойти CORS.
+const TQ = encodeURIComponent("select A,B,C,D,E,F,G,H,I,J,K,L,M where A is not null or C is not null or G is not null or H is not null or L is not null");
+const GVIZ_SRC = `https://docs.google.com/spreadsheets/d/${SHEET_ID}/gviz/tq?gid=${GID}&tq=${TQ}`;
 
-const CURRENCY='USD';
-const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:CURRENCY,maximumFractionDigits:2}).format(n||0);
+// ——— JSONP загрузка
+function loadGVizJSONP(src, timeoutMs=12000){
+  return new Promise((resolve,reject)=>{
+    let done=false, tid=setTimeout(()=>{ if(done) return; done=true; cleanup(); reject(new Error('timeout')); }, timeoutMs);
 
-// ---- Robust fetch with debug ----
-async function fetchCSV(){
-  let lastErr=null, lastBody='';
-  for(const url of SOURCES){
-    try{
-      const r=await fetch(url,{cache:'no-store',mode:'cors'});
-      const t=await r.text();
-      if(r.ok && /^[^\r\n]*Date,Type,Unit,Category,Repair,Details,Vendor,Total,/.test(t.trim())){
-        return t;
+    // подменяем точку входа
+    window.google = window.google || {};
+    window.google.visualization = window.google.visualization || {};
+    window.google.visualization.Query = window.google.visualization.Query || {};
+    const prev = window.google.visualization.Query.setResponse;
+    window.google.visualization.Query.setResponse = (payload)=>{
+      if(done) return;
+      done=true; clearTimeout(tid); cleanup(); resolve(payload);
+      // возвращаем предыдущий обработчик если был
+      window.google.visualization.Query.setResponse = prev || (x=>x);
+    };
+
+    function cleanup(){ s.remove(); }
+    const s=document.createElement('script'); s.src=src; s.onerror=()=>{ if(done) return; done=true; clearTimeout(tid); cleanup(); reject(new Error('script load error')); };
+    document.body.appendChild(s);
+  });
+}
+
+// ——— Парсинг GViz
+function parseGVizPayload(j){
+  const cols = j.table.cols.map(c => (c.label||c.id||'').trim());
+  return j.table.rows.map(r=>{
+    const o={};
+    (r.c||[]).forEach((c,i)=>{
+      let v = c ? c.v : '';
+      if (typeof v==='string' && /^Date\(\d+,\d+,\d+\)$/.test(v)){
+        const m=v.match(/^Date\((\d+),(\d+),(\d+)\)$/);
+        if(m) v = new Date(+m[1], +m[2], +m[3]); // месяц 0-based
       }
-      lastErr=`HTTP ${r.status} on ${url}`;
-      lastBody=t.slice(0,600);
-    }catch(e){ lastErr=String(e); }
-  }
-  showDebug(`${lastErr}\n\n${lastBody}`);
-  throw new Error('CSV not available');
+      o[cols[i]||`col${i}`]=v;
+    });
+    return o;
+  });
 }
 
-function showDebug(msg){
-  const box=document.getElementById('debug'); box.style.display='block'; box.textContent=`Debug:\n${msg}`;
-}
-
-// ---- CSV parser (quotes-safe) ----
-function parseCsv(csv){
-  const rows=[]; let row=[], cell='', q=false;
-  const push=()=>{row.push(cell);cell='';}, nl=()=>{rows.push(row);row=[];};
-  for(let i=0;i<csv.length;i++){
-    const ch=csv[i];
-    if(ch==='"'){ q=!q; continue; }
-    if(ch===',' && !q){ push(); continue; }
-    if((ch==='\n' || ch==='\r') && !q){ if(cell!==''||row.length){ push(); nl(); } continue; }
-    cell+=ch;
-  }
-  if(cell!==''||row.length){ push(); nl(); }
-  return rows.filter(r=>r.length);
-}
-
-// ---- Normalize to A–M only ----
-function normalize(table){
-  const hdr=table[0].map(h=>h.trim());
-  const need=['Date','Type','Unit','Category','Repair','Details','Vendor','Total','Paid By','Paid?','Reported By','Status','Notes'];
-  // карта индексов
-  const idx={}; need.forEach(n=>idx[n]=hdr.indexOf(n));
-  const get=(r,n)=>{const i=idx[n]; return i>=0 && r[i]!=null ? String(r[i]).trim() : '';};
+// ——— Нормализация к A–M
+function normalize(rows){
   const parseAmount=v=>{ if(v==null) return 0; const s=String(v).replace(/[^0-9.,-]+/g,'').replace(/(\d),(?=\d{3}\b)/g,'$1').replace(',','.'); const n=parseFloat(s); return isNaN(n)?0:n; };
-  const parseDate=v=>{ if(!v) return null; const d=dayjs(v,['YYYY-MM-DD','M/D/YYYY','MM/DD/YYYY','D.M.YYYY','DD.MM.YYYY'],true); return d.isValid()? d.toDate(): null; };
-  return table.slice(1).map(r=>({
-    date: parseDate(get(r,'Date')),
-    ym: (d=>d? dayjs(d).format('YYYY-MM'): null)(parseDate(get(r,'Date'))),
-    type:get(r,'Type'), unit:get(r,'Unit'), category:get(r,'Category'),
-    repair:get(r,'Repair'), details:get(r,'Details'), vendor:get(r,'Vendor'),
-    total: parseAmount(get(r,'Total')),
-    paid_by:get(r,'Paid By'), paid:get(r,'Paid?').toLowerCase(),
-    reported_by:get(r,'Reported By'), status:get(r,'Status'), notes:get(r,'Notes')
-  }));
+  return rows.map(r=>{
+    const raw=r['Date']||'';
+    const d = (raw instanceof Date) ? dayjs(raw) : dayjs(raw,['YYYY-MM-DD','M/D/YYYY','MM/DD/YYYY','D.M.YYYY','DD.MM.YYYY'],true);
+    const ok = d.isValid();
+    return {
+      date: ok? d.toDate(): null,
+      ym:   ok? d.format('YYYY-MM'): null,
+      type:r['Type']||'', unit:r['Unit']||'', category:r['Category']||'',
+      repair:r['Repair']||'', details:r['Details']||'',
+      vendor:r['Vendor']||'', total:parseAmount(r['Total']),
+      paid_by:r['Paid By']||'', paid:(r['Paid?']||'').toLowerCase(),
+      reported_by:r['Reported By']||'', status:(r['Status']||'').toString().trim(),
+      notes:r['Notes']||''
+    };
+  });
 }
-
-function keepValid(rows){
-  return rows.filter(r =>
+function keepValid(a){
+  return a.filter(r =>
     r.date || r.unit || r.vendor || r.category || r.type || r.repair || r.details || r.notes ||
-    (Number.isFinite(r.total) && r.total!==0) || (r.status && r.status!=='')
+    (Number.isFinite(r.total)&&r.total!==0) || (r.status&&r.status!=='')
   );
 }
 
+// ——— Агрегация/рендер
 function aggregate(rows){
-  const byMonth=new Map(); rows.forEach(r=>{ if(r.ym) byMonth.set(r.ym,(byMonth.get(r.ym)||0)+r.total); });
-  const months=[...byMonth.keys()].sort(); const monthSeries=months.map(m=>byMonth.get(m));
-  const byVendor=new Map(); rows.forEach(r=>{ const k=(r.vendor||'').trim(); if(!k) return; byVendor.set(k,(byVendor.get(k)||0)+r.total); });
-  const totalSpend=rows.reduce((s,r)=>s+(Number.isFinite(r.total)?r.total:0),0);
-  const openCount=rows.filter(r=> (r.status||'').toLowerCase()!=='closed' && r.status!=='').length;
-  const vendorCount=byVendor.size;
-  return {months,monthSeries,totalSpend,openCount,vendorCount};
+  const byM=new Map(); rows.forEach(r=>{ if(r.ym) byM.set(r.ym,(byM.get(r.ym)||0)+r.total); });
+  const months=[...byM.keys()].sort(), series=months.map(m=>byM.get(m));
+  const byV=new Map(); rows.forEach(r=>{ const k=(r.vendor||'').trim(); if(!k) return; byV.set(k,(byV.get(k)||0)+r.total); });
+  return {
+    months, series,
+    total: rows.reduce((s,r)=>s+(Number.isFinite(r.total)?r.total:0),0),
+    open: rows.filter(r=> (r.status||'').toLowerCase()!=='closed' && r.status!=='').length,
+    vendors: byV.size
+  };
 }
-
-function renderKPI(A){
-  animateNum(document.getElementById('kpi-total'),A.totalSpend,money);
-  animateNum(document.getElementById('kpi-open'),A.openCount,v=>v.toFixed(0));
-  document.getElementById('kpi-vendors').textContent=A.vendorCount;
-}
-function animateNum(el,val,fmt){const t0=performance.now(),dur=800;function f(t){const k=Math.min((t-t0)/dur,1);el.textContent=fmt(val*(1-Math.pow(1-k,3))); if(k<1)requestAnimationFrame(f);}requestAnimationFrame(f);}
-
-function renderLine(A){
+const money=n=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',maximumFractionDigits:2}).format(n||0);
+function animate(el,val,fmt){const t0=performance.now(),dur=900;function f(t){const k=Math.min((t-t0)/dur,1);el.textContent=fmt(val*(1-Math.pow(1-k,3))); if(k<1)requestAnimationFrame(f);}requestAnimationFrame(f);}
+function renderKPI(a){animate(document.getElementById('kpi-total'),a.total,money);animate(document.getElementById('kpi-open'),a.open,v=>v.toFixed(0));document.getElementById('kpi-vendors').textContent=a.vendors;}
+function renderLine(a){
   const ctx=document.getElementById('lineChart').getContext('2d'); if(window._line) window._line.destroy();
-  window._line=new Chart(ctx,{type:'line',data:{labels:A.months,datasets:[{label:'Spend',data:A.monthSeries,borderColor:'#4da3ff',borderWidth:2.5,pointRadius:0,tension:.35,fill:true,
+  window._line=new Chart(ctx,{type:'line',data:{labels:a.months,datasets:[{label:'Spend',data:a.series,borderColor:'#4da3ff',borderWidth:2.5,pointRadius:0,tension:.35,fill:true,
     backgroundColor:c=>{const g=c.chart.ctx.createLinearGradient(0,c.chart.chartArea.bottom,0,c.chart.chartArea.top);g.addColorStop(0,'rgba(77,163,255,0)');g.addColorStop(.6,'rgba(77,163,255,.18)');g.addColorStop(1,'rgba(77,163,255,.28)');return g;}}]},
     options:{plugins:{legend:{display:false}},scales:{x:{grid:{display:false},ticks:{color:'#9fb3c8'}},y:{grid:{color:'rgba(255,255,255,.06)'},ticks:{color:'#9fb3c8'},beginAtZero:true}}});
 }
-
 function renderTable(rows){
-  const el=document.getElementById('tbl');
-  const t=document.createElement('table'); const th=document.createElement('thead');
-  th.innerHTML=`<tr><th>Date</th><th>Unit</th><th>Vendor</th><th>Category</th><th>Type</th><th>Total</th><th>Status</th><th>Notes</th></tr>`;
-  t.appendChild(th);
+  const el=document.getElementById('tbl'); const t=document.createElement('table'); const th=document.createElement('thead');
+  th.innerHTML=`<tr><th>Date</th><th>Unit</th><th>Vendor</th><th>Category</th><th>Type</th><th>Total</th><th>Status</th><th>Notes</th></tr>`; t.appendChild(th);
   const tb=document.createElement('tbody');
   rows.slice().reverse().forEach(r=>{
+    const d=r.date?dayjs(r.date).format('YYYY-MM-DD'):'—';
+    const st=(r.status||'').toLowerCase()==='closed'?'closed':'open';
     const tr=document.createElement('tr');
-    const date=r.date?dayjs(r.date).format('YYYY-MM-DD'):'—';
-    const statusClass=(r.status||'').toLowerCase()==='closed'?'closed':'open';
-    tr.innerHTML=`<td>${date}</td><td>${esc(r.unit)}</td><td>${esc(r.vendor)}</td><td>${esc(r.category)}</td><td>${esc(r.type)}</td><td>${money(r.total)}</td><td><span class="badge ${statusClass}">${esc(r.status||'—')}</span></td><td>${esc(r.notes||'')}</td>`;
+    tr.innerHTML=`<td>${d}</td><td>${esc(r.unit)}</td><td>${esc(r.vendor)}</td><td>${esc(r.category)}</td><td>${esc(r.type)}</td><td>${money(r.total)}</td><td><span class="badge ${st}">${esc(r.status||'—')}</span></td><td>${esc(r.notes||'')}</td>`;
     tb.appendChild(tr);
   });
-  t.appendChild(tb);
-  el.innerHTML=''; el.appendChild(t);
+  t.appendChild(tb); el.innerHTML=''; el.appendChild(t);
   document.getElementById('count').textContent=`(${rows.length})`;
 }
 const esc=s=>String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+function showDebug(msg){const b=document.getElementById('debug');b.style.display='block';b.textContent='Debug: '+msg;}
 
-(async function init(){
+// ——— INIT
+(async function(){
   try{
-    const csv=await fetchCSV();
-    const table=parseCsv(csv);
-    const rows=keepValid(normalize(table)).sort((a,b)=>(a.date?+a.date:0)-(b.date?+b.date:0));
-    const A=aggregate(rows);
+    const payload = await loadGVizJSONP(GVIZ_SRC);
+    if(payload.status!=='ok'){ showDebug(JSON.stringify(payload).slice(0,600)); throw new Error('gviz not ok'); }
+    const raw = parseGVizPayload(payload);
+    const rows = keepValid(normalize(raw)).sort((a,b)=>(a.date?+a.date:0)-(b.date?+b.date:0));
+    const A = aggregate(rows);
     renderKPI(A); renderLine(A);
 
-    let filtered=rows;
-    const q=document.getElementById('q'); const go=document.getElementById('go');
-    const apply=()=>{ const needle=q.value.trim().toLowerCase();
-      filtered=!needle?rows:rows.filter(r=>{
-        const dateHit=r.date?dayjs(r.date).format('YYYY-MM-DD').includes(needle):false;
-        return ['unit','vendor','category','type','notes','status','details','repair','paid_by']
-          .some(k=>String(r[k]||'').toLowerCase().includes(needle)) || dateHit || String(r.total).includes(needle);
-      });
-      renderTable(filtered);
-    };
+    let filtered=rows; const q=document.getElementById('q'); const go=document.getElementById('go');
+    const apply=()=>{ const needle=q.value.trim().toLowerCase(); filtered=!needle?rows:rows.filter(r=>{
+      const dateHit=r.date?dayjs(r.date).format('YYYY-MM-DD').includes(needle):false;
+      return ['unit','vendor','category','type','notes','status','details','repair','paid_by'].some(k=>String(r[k]||'').toLowerCase().includes(needle))||dateHit||String(r.total).includes(needle);
+    }); renderTable(filtered); };
     go.addEventListener('click',apply); q.addEventListener('keydown',e=>{ if(e.key==='Enter') apply(); });
     renderTable(filtered);
   }catch(e){
     showDebug(String(e));
-    document.getElementById('tbl').innerHTML = `<div style="padding:12px;color:#ffbdbd">Data load error. See Debug box above.</div>`;
+    document.getElementById('tbl').innerHTML='<div style="padding:12px;color:#ffbdbd">Data load error. See Debug above.</div>';
     console.error(e);
   }
 })();
